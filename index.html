@@ -164,23 +164,51 @@
       console.log(`Added ${buildings.length} building pins for ${neighborhood.name}`);
     }
 
-    // --- Draw Neighborhood Circles + Labels ---
-    NEIGHBORHOODS.forEach(n => {
-      const circle = new mapkit.CircleOverlay(
+ // --- Draw Neighborhood Circles + Click Targets ---
+NEIGHBORHOODS.forEach(n => {
+  // Visible circle
+  const circle = new mapkit.CircleOverlay(
+    new mapkit.Coordinate(n.center.latitude, n.center.longitude),
+    n.radius,
+    {
+      style: new mapkit.Style({
+        lineWidth: 2.5,
+        strokeColor: n.color,
+        fillColor: n.color,
+        strokeOpacity: 0.6,
+        fillOpacity: 0.12
+      })
+    }
+  );
+
+  map.addOverlay(circle);
+
+  // Invisible clickable hit-area (covers entire circle)
+  const hitArea = new mapkit.MarkerAnnotation(
+    new mapkit.Coordinate(n.center.latitude, n.center.longitude),
+    {
+      opacity: 0.01,            // invisible but clickable
+      title: n.name
+    }
+  );
+
+  hitArea.addEventListener("select", async () => {
+    selectedNeighborhood = n;
+
+    map.setRegionAnimated(
+      new mapkit.CoordinateRegion(
         new mapkit.Coordinate(n.center.latitude, n.center.longitude),
-        n.radius,
-        {
-          style: new mapkit.Style({
-            lineWidth: 2.5,
-            strokeColor: n.color,
-            fillColor: n.color,
-            strokeOpacity: 0.6,
-            fillOpacity: 0.12
-          }),
-          enabled: true,
-          selected: false
-        }
-      );
+        new mapkit.CoordinateSpan(0.05, 0.05)
+      ),
+      true
+    );
+
+    await showBuildingsForNeighborhood(n);
+  });
+
+  map.addAnnotation(hitArea);
+});
+
       
       map.addOverlay(circle);
 
