@@ -231,18 +231,19 @@
     // Add map click listener for zoom out
     let mapClickTimeout;
     map.element.addEventListener('click', function(e) {
-      // Debounce to avoid conflicts with annotation clicks
-      clearTimeout(mapClickTimeout);
-      mapClickTimeout = setTimeout(() => {
-        // Check if we're zoomed in
-        const currentSpan = map.region.span;
-        const isZoomedIn = currentSpan.latitudeDelta < 0.1;
-        
-        if (isZoomedIn && selectedNeighborhood) {
-          // Check if any callout is currently showing
-          const hasOpenCallout = buildingAnnotations.some(ann => ann.calloutEnabled);
+      // Check if click is on the map background (not on markers or labels)
+      const clickedOnMap = e.target.classList.contains('mk-map-view') || 
+                           e.target === map.element || 
+                           e.target.id === 'map';
+      
+      if (clickedOnMap && selectedNeighborhood) {
+        clearTimeout(mapClickTimeout);
+        mapClickTimeout = setTimeout(() => {
+          // Check current zoom level
+          const currentSpan = map.region.span;
+          const isZoomedIn = currentSpan.latitudeDelta < 0.1;
           
-          if (!hasOpenCallout) {
+          if (isZoomedIn) {
             // Zoom back out to overview
             map.setRegionAnimated(
               new mapkit.CoordinateRegion(
@@ -253,7 +254,9 @@
             );
             
             // Show labels again
-            neighborhoodLabels.forEach(label => label.visible = true);
+            neighborhoodLabels.forEach(label => {
+              label.visible = true;
+            });
             
             // Clear buildings
             buildingAnnotations.forEach(annotation => map.removeAnnotation(annotation));
@@ -261,8 +264,8 @@
             
             selectedNeighborhood = null;
           }
-        }
-      }, 100);
+        }, 100);
+      }
     });
   </script>
 </body>
