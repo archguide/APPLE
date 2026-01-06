@@ -224,41 +224,36 @@
       neighborhoodLabels.push(label);
     });
     
-    // Add click listener to map canvas for zoom out
-    setTimeout(() => {
-      const mapCanvas = document.querySelector('.mk-map-view');
-      if (mapCanvas) {
-        mapCanvas.addEventListener('click', function(e) {
-          // Only respond if we're zoomed in and clicked directly on canvas
-          if (selectedNeighborhood && e.target === mapCanvas) {
-            const currentSpan = map.region.span;
-            const isZoomedIn = currentSpan.latitudeDelta < 0.1;
-            
-            if (isZoomedIn) {
-              // Zoom back out
-              map.setRegionAnimated(
-                new mapkit.CoordinateRegion(
-                  new mapkit.Coordinate(34.0522, -118.2437),
-                  new mapkit.CoordinateSpan(0.25, 0.35)
-                ),
-                true
-              );
-              
-              // Show labels again
-              neighborhoodLabels.forEach(label => {
-                label.visible = true;
-              });
-              
-              // Clear buildings
-              buildingAnnotations.forEach(annotation => map.removeAnnotation(annotation));
-              buildingAnnotations = [];
-              
-              selectedNeighborhood = null;
-            }
-          }
-        });
+    // Add click-out listener - attach to map directly
+    map.addEventListener('single-tap', function(event) {
+      // Check if we're zoomed in
+      if (selectedNeighborhood) {
+        const currentSpan = map.region.span;
+        const isZoomedIn = currentSpan.latitudeDelta < 0.1;
+        
+        if (isZoomedIn) {
+          // Zoom back out
+          map.setRegionAnimated(
+            new mapkit.CoordinateRegion(
+              new mapkit.Coordinate(34.0522, -118.2437),
+              new mapkit.CoordinateSpan(0.25, 0.35)
+            ),
+            true
+          );
+          
+          // Show labels again
+          neighborhoodLabels.forEach(label => {
+            label.visible = true;
+          });
+          
+          // Clear buildings
+          buildingAnnotations.forEach(annotation => map.removeAnnotation(annotation));
+          buildingAnnotations = [];
+          
+          selectedNeighborhood = null;
+        }
       }
-    }, 1000); // Wait for map to fully load
+    });
   </script>
 </body>
 </html>
