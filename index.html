@@ -184,24 +184,20 @@
       
       map.addOverlay(circle);
 
-      // Create clickable label
+      // Create clickable label - plain text only
       const label = new mapkit.Annotation(
         new mapkit.Coordinate(n.center.latitude, n.center.longitude),
         () => {
           const el = document.createElement("div");
           el.textContent = n.name;
           el.style.cssText = `
-            background: rgba(255,255,255,0.95);
-            padding: 8px 14px;
-            border-radius: 12px;
             font-weight: 600;
-            font-size: 14px;
-            color: #222;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            font-size: 16px;
+            color: #000;
             cursor: pointer;
             white-space: nowrap;
-            border: 2px solid ${n.color};
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            pointer-events: auto;
           `;
           
           // Click handler for label
@@ -228,45 +224,41 @@
       neighborhoodLabels.push(label);
     });
     
-    // Add map click listener for zoom out
-    let mapClickTimeout;
-    map.element.addEventListener('click', function(e) {
-      // Check if click is on the map background (not on markers or labels)
-      const clickedOnMap = e.target.classList.contains('mk-map-view') || 
-                           e.target === map.element || 
-                           e.target.id === 'map';
-      
-      if (clickedOnMap && selectedNeighborhood) {
-        clearTimeout(mapClickTimeout);
-        mapClickTimeout = setTimeout(() => {
-          // Check current zoom level
-          const currentSpan = map.region.span;
-          const isZoomedIn = currentSpan.latitudeDelta < 0.1;
-          
-          if (isZoomedIn) {
-            // Zoom back out to overview
-            map.setRegionAnimated(
-              new mapkit.CoordinateRegion(
-                new mapkit.Coordinate(34.0522, -118.2437),
-                new mapkit.CoordinateSpan(0.25, 0.35)
-              ),
-              true
-            );
+    // Add click listener to map canvas for zoom out
+    setTimeout(() => {
+      const mapCanvas = document.querySelector('.mk-map-view');
+      if (mapCanvas) {
+        mapCanvas.addEventListener('click', function(e) {
+          // Only respond if we're zoomed in and clicked directly on canvas
+          if (selectedNeighborhood && e.target === mapCanvas) {
+            const currentSpan = map.region.span;
+            const isZoomedIn = currentSpan.latitudeDelta < 0.1;
             
-            // Show labels again
-            neighborhoodLabels.forEach(label => {
-              label.visible = true;
-            });
-            
-            // Clear buildings
-            buildingAnnotations.forEach(annotation => map.removeAnnotation(annotation));
-            buildingAnnotations = [];
-            
-            selectedNeighborhood = null;
+            if (isZoomedIn) {
+              // Zoom back out
+              map.setRegionAnimated(
+                new mapkit.CoordinateRegion(
+                  new mapkit.Coordinate(34.0522, -118.2437),
+                  new mapkit.CoordinateSpan(0.25, 0.35)
+                ),
+                true
+              );
+              
+              // Show labels again
+              neighborhoodLabels.forEach(label => {
+                label.visible = true;
+              });
+              
+              // Clear buildings
+              buildingAnnotations.forEach(annotation => map.removeAnnotation(annotation));
+              buildingAnnotations = [];
+              
+              selectedNeighborhood = null;
+            }
           }
-        }, 100);
+        });
       }
-    });
+    }, 1000); // Wait for map to fully load
   </script>
 </body>
 </html>
