@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Arch Guide – Neighborhood Map</title>
+
+  <!-- MapKit JS -->
+  <script
+    src="https://cdn.apple-mapkit.com/mk/5.x.x/mapkit.js"
+    crossorigin
+  ></script>
+
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; }
+    #map { width: 100%; height: 100%; }
+    
+    /* Rounded image popup - no text */
+    .building-callout {
+      width: 200px;
+      height: 200px;
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+      cursor: pointer;
+      background: white;
+    }
+    
+    .building-callout img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <script>
+    // --- Supabase Config ---
+    const SUPABASE_URL = 'https://msuzmrfzzkqffhpilirb.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1zdXptcmZ6emtxZmZocGlsaXJiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY3NjY5NDAsImV4cCI6MjA4MjM0Mjk0MH0.kGHLaDT2FR9AAnZjP96FgAcSPjCQm6w9ifAqd6cEOoQ';
+    
+    // --- Neighborhood Data with IDs ---
+    const NEIGHBORHOODS = [
+      { id: "DTL", name: "Downtown LA", center: { latitude: 34.0407, longitude: -118.2468 }, radius: 1800, color: "#1150AB" },
+      { id: "SLV", name: "Silver Lake", center: { latitude: 34.0864, longitude: -118.2709 }, radius: 1400, color: "#2E7D6F" },
+      { id: "PAS", name: "Pasadena", center: { latitude: 34.1478, longitude: -118.1445 }, radius: 1600, color: "#C56B3C" }
+    ];
+
+    let buildingAnnotations = [];
+    let neighborhoodLabels = [];
+    let selectedNeighborhood = null;
+
+    // --- MapKit Init ---
+    mapkit.init({
+      authorizationCallback: function(done) {
+        done('eyJraWQiOiJSN05HVzZZNko3IiwidHlwIjoiSldUIiwiYWxnIjoiRVMyNTYifQ.eyJpc3MiOiI4N05MV1VQUVFBIiwiaWF0IjoxNzY3NjcxMDk2LCJvcmlnaW4iOiJhcmNoZ3VpZGUuZ2l0aHViLmlvIn0.aGopUszusE4HfaiqItorz1NoVxzy5z46YItwrq43WVgyERsMm8kkmLZMJNUHd83c-icIhRra2mBFwgpdvYk-SA');
+      }
+    });
+
+    // --- Create Map ---
+    const map = new mapkit.Map("map", {
+      center: new mapkit.Coordinate(34.0522, -118.2437),
+      region: new mapkit.CoordinateRegion(
+        new mapkit.Coordinate(34.0522, -118.2437),
+        new mapkit.CoordinateSpan(0.25, 0.35)
+      ),
+      showsCompass: mapkit.FeatureVisibility.Hidden,
+      showsScale: false,
+      showsMapTypeControl: false,
+      isZoomEnabled: true,
+      isScrollEnabled: true
+    });
+
+    // --- Load Buildings from Supabase ---
+    async function loadBuildings(neighborhoodId) {
+      try {
+        const response = await fetch(
+          `${SUPABASE_URL}/rest/v1/buildings?neighborhood_id=eq.${neighborhoodId}&select=id,title,latitude,longitude,image`,
+          {
+            headers: {
+              'apikey': SUPABASE_ANON_KEY,
+              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+            }
+          }
+        );
+        
+        const buildings = await response.json();
+        return buildings;
+      } catch (error) {
+        console.error('Error loading buildings:', error);
+        return [];
+      }
+    }
+
+    // --- Add Building Pins ---
+    async function showBuildingsForNeighborhood(neighborhood) {
+      // Hide all neighborhood labels
+      neighborhoodLabels.forEach(label => label.visible = false);
+      
+      // Clear existing building pins
+      buildingAnnotations.forEach(annotation => map.removeAnnotation(annotation));
+      buildingAnnotations = [];
+      
+      // Load buildings
+      const buildings = await loadBuildings(neighborhood.id);
+      
+      if (buildings.length === 0) {
+        console.log('No buildings found for', neighborhood.name);
+        return;
+      }
+      
+      // Add building markers
+      buildings.forEach(building => {
+        if (!building.latitude || !building.longitude) return;
+        
+        const annotation = new mapkit.MarkerAnnotation(
+          new mapkit.Coordinate(building.latitude, building.longitude),
+          {
+            color: neighborhood.color,
+            glyphText: '',
+            title: building.title,
+            data: building // Store building data
+          }
+        );
+        
+        // Custom callout - just rounded image
+        annotation.callout = {
+          calloutElementForAnnotation: function(annotation) {
+            const building = annotation.data;
+            const callout = document.createElement('div');
+            callout.className = 'building-callout';
+            
+            if (building.image) {
+              callout.innerHTML = `<img src="${building.image}" alt="${building.title}" />`;
+            } else {
+              callout.innerHTML = `<div style="width:100%; height:100%; background:#ddd; display:flex; align-items:center; justify-content:center; font-size:14px; color:#666;">No Image</div>`;
+            }
+            
+            // Click handler for callout
+            callout.addEventListener('click', () => {
+              if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                  action: 'navigateToBuilding',
+                  buildingId: building.id,
+                  buildingTitle: building.title
+                }));
+              } else {
+                console.log('Navigate to building:', building.id);
+              }
+            });
+            
+            return callout;
+          }
+        };
+        
+        map.addAnnotation(annotation);
+        buildingAnnotations.push(annotation);
+      });
+      
+      console.log(`Added ${buildings.length} building pins for ${neighborhood.name}`);
+    }
+
+    // --- Draw Neighborhood Circles + Labels ---
+    NEIGHBORHOODS.forEach(n => {
+      const circle = new mapkit.CircleOverlay(
+        new mapkit.Coordinate(n.center.latitude, n.center.longitude),
+        n.radius,
+        {
+          style: new mapkit.Style({
+            lineWidth: 2,
+            strokeColor: n.color,
+            fillColor: n.color,
+            strokeOpacity: 0.6,
+            fillOpacity: 0.15
+          })
+        }
+      );
+      
+      // Make circle clickable
+      circle.addEventListener('select', async function() {
+        selectedNeighborhood = n;
+        
+        // Zoom to neighborhood
+        map.setCenterAnimated(
+          new mapkit.Coordinate(n.center.latitude, n.center.longitude),
+          true
+        );
+        map.setRegionAnimated(
+          new mapkit.CoordinateRegion(
+            new mapkit.Coordinate(n.center.latitude, n.center.longitude),
+            new mapkit.CoordinateSpan(0.05, 0.05)
+          ),
+          true
+        );
+        
+        // Load and show buildings
+        await showBuildingsForNeighborhood(n);
+      });
+      
+      map.addOverlay(circle);
+
+      const label = new mapkit.Annotation(
+        new mapkit.Coordinate(n.center.latitude, n.center.longitude),
+        () => {
+          const el = document.createElement("div");
+          el.textContent = n.name;
+          el.style.cssText = `
+            background: rgba(255,255,255,0.9);
+            padding: 6px 10px;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 13px;
+            color: #222;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+            pointer-events: auto;
+            white-space: nowrap;
+            cursor: pointer;
+          `;
+          
+          // Make label clickable too
+          el.addEventListener('click', async function() {
+            selectedNeighborhood = n;
+            
+            // Zoom to neighborhood
+            map.setCenterAnimated(
+              new mapkit.Coordinate(n.center.latitude, n.center.longitude),
+              true
+            );
+            map.setRegionAnimated(
+              new mapkit.CoordinateRegion(
+                new mapkit.Coordinate(n.center.latitude, n.center.longitude),
+                new mapkit.CoordinateSpan(0.05, 0.05)
+              ),
+              true
+            );
+            
+            // Load and show buildings
+            await showBuildingsForNeighborhood(n);
+          });
+          
+          return el;
+        }
+      );
+      map.addAnnotation(label);
+      neighborhoodLabels.push(label);
+    });
+    
+    // Add map click listener to zoom out when tapping outside
+    map.element.addEventListener('click', function(e) {
+      // Only zoom out if clicked directly on map (not on annotations)
+      if (e.target === map.element || e.target.id === 'map') {
+        if (selectedNeighborhood) {
+          // Zoom back out
+          map.setRegionAnimated(
+            new mapkit.CoordinateRegion(
+              new mapkit.Coordinate(34.0522, -118.2437),
+              new mapkit.CoordinateSpan(0.25, 0.35)
+            ),
+            true
+          );
+          
+          // Show labels again
+          neighborhoodLabels.forEach(label => label.visible = true);
+          
+          // Clear buildings
+          buildingAnnotations.forEach(annotation => map.removeAnnotation(annotation));
+          buildingAnnotations = [];
+          
+          selectedNeighborhood = null;
+        }
+      }
+    });
+  </script>
+</body>
+</html>
